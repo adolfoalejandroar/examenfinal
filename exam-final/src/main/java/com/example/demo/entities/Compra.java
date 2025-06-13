@@ -1,12 +1,14 @@
 package com.example.demo.entities;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.JoinColumn;
 import lombok.AllArgsConstructor;
@@ -38,6 +40,12 @@ public class Compra {
     @ManyToOne
     @JoinColumn(name = "cajero_id")
     private Cajero cajero;
+    
+    @OneToMany(mappedBy = "compra")
+    private List<DetallesCompra> detallesCompras;
+    
+    @OneToMany(mappedBy = "compra")
+    private List<Pago> pagos;
 
     private Double total;
 
