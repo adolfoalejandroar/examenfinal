@@ -23,6 +23,18 @@ public class ClienteServ {
 		return repository.findById(id).orElse(null);
 	}
 
+	public Cliente findByDocument(String documento) {
+		return repository.findAll().stream()
+                .filter(t -> documento.equals(t.getDocumento()))
+                .findFirst()
+                .orElse(null);
+	}
+	
+	// Retorna la cantidad de clientes + 1
+	public int nextClienteId() {
+	    return (int) repository.count() + 1;
+	}
+
 	// Read all Cliente
 	public List<Cliente> findAll() {
 		return repository.findAll();

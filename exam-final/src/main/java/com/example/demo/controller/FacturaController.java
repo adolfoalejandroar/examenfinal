@@ -3,9 +3,10 @@ package com.example.demo.controller;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*; 
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import com.example.demo.entities.*;
 import com.example.demo.services.*;
@@ -37,42 +38,108 @@ public class FacturaController {
 
     @PostMapping("/{uuid}")
     public String crearFactura(@PathVariable String uuid, @RequestBody FacturaRequest factura) {
+
         // Buscar tienda
-        Tienda tienda = tiendaServ.findAll().stream()
-                .filter(t -> uuid.equals(t.getUuid()))
-                .findFirst()
-                .orElse(null);
-        if (tienda == null) return "Tienda no encontrada";
-
-        // Buscar o crear cliente
-        TipoDocumento tipoDoc = tipoDocumentoServ.findAll().stream()
-                .filter(td -> td.getNombre().equalsIgnoreCase(factura.cliente.tipo_documento))
-                .findFirst()
-                .orElse(null);
-        if (tipoDoc == null) return "Tipo de documento no encontrado";
-
-        Cliente cliente = clienteServ.findAll().stream()
-                .filter(c -> c.getDocumento().equals(factura.cliente.documento))
-                .findFirst()
-                .orElse(null);
-        if (cliente == null) {
-            cliente = new Cliente(null, factura.cliente.nombre, factura.cliente.documento, tipoDoc, new ArrayList<>());
-            cliente = clienteServ.save(cliente);
+        Tienda tienda = tiendaServ.findByUUID(uuid);
+        if (tienda == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Tienda no existe: " + uuid);
         }
 
         // Buscar vendedor
-        Vendedor vendedor = vendedorServ.findAll().stream()
-                .filter(v -> v.getDocumento().equals(factura.vendedor.documento))
-                .findFirst()
-                .orElse(null);
-        if (vendedor == null) return "Vendedor no encontrado";
+        Vendedor vendedor = vendedorServ.findByDocument(factura.vendedor.documento);
+        if (vendedor == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "El vendedor no existe en la tienda: " + factura.vendedor.documento);
+        }
 
         // Buscar cajero por token
-        Cajero cajero = cajeroServ.findAll().stream()
-                .filter(c -> factura.cajero.token.equals(c.getToken()))
-                .findFirst()
-                .orElse(null);
-        if (cajero == null) return "Cajero no encontrado";
+        Cajero cajero = cajeroServ.findByToken(factura.cajero.token);
+        if (cajero == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "El cajero no está asignado a esta tienda: " + factura.cajero.token);
+        }
+
+        // Validar si el documento del cliente existe. Si el cliente no existe se crea
+        Cliente cliente = clienteServ.findByDocument(factura.cliente.documento);
+        if (cliente == null) {
+            cliente = new Cliente();
+            cliente.setDocumento(factura.cliente.documento);
+            cliente.setNombre(factura.cliente.nombre);
+            cliente.setTipoDocumento(tipoDocumentoServ.findByType(factura.cliente.tipo_documento));
+            cliente.setId(clienteServ.nextClienteId());
+            cliente.setCompras(new ArrayList<Compra>());
+
+            // Guardar al cliente
+            clienteServ.save(cliente);
+        }
+
+        // Crear un listado de detalles para procesarlos por producto
+        List<DetallesCompra> detalles = new ArrayList<DetallesCompra>();
+
+        // Procesar productos
+        Double total = 0.0;
+        for (ProductoRequest prodReq : factura.productos) {
+
+            // Busca cada producto
+            Producto producto = productoServ.findByReference(prodReq.referencia);
+
+            // Si no lo encuentra, error 404
+            if (producto == null) {
+                String message = "La referencia del producto " + prodReq.referencia
+                        + " no existe, por favor revisar los datos" + prodReq.referencia;
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, message);
+            }
+
+            // Si lo encuentra, multiplicar (precio * cantidad) - descuento
+            double precio = producto.getPrecio() * prodReq.cantidad;
+            double descuento = precio * (prodReq.descuento / 100.0);
+            double precioFinal = precio - descuento;
+            total += precioFinal;
+
+            // Crear detalle (sin asignar compra aún)
+            DetallesCompra detalle = new DetallesCompra();
+            detalle.setProducto(producto);
+            detalle.setCantidad(prodReq.cantidad);
+            detalle.setPrecio(producto.getPrecio());
+            detalle.setDescuento(descuento);
+            detalles.add(detalle);
+        }
+
+        // Sumamos el impuesto a la factura si no es negativo ni nulo
+        Double impuesto = factura.impuesto;
+        if (impuesto != null && impuesto >= 0) {
+            total += impuesto;
+        }
+
+        // Crear un listado de pagos para procesarlos
+        List<Pago> pagos = new ArrayList<Pago>();
+
+        // Procesar pagos
+        Double tributo = 0.0;
+        for (PagoRequest pagoReq : factura.medios_pago) {
+            TipoPago tipoPago = tipoPagoServ.findByType(pagoReq.tipo_pago);
+            if (tipoPago == null) {
+                String message = "Tipo de pago no permitido en la tienda: " + pagoReq.tipo_pago;
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, message);
+            }
+
+            Pago pago = new Pago();
+            pago.setTipoPago(tipoPago);
+            pago.setTarjetaTipo(pagoReq.tipo_tarjeta);
+            pago.setCuotas(pagoReq.cuotas);
+            pago.setValor(pagoReq.valor);
+            // NO asignar compra aún
+            pagos.add(pago);
+
+            tributo += pago.getValor();
+        }
+
+        // Si la cantidad de dinero pagado es inferior a la cantidad que se debe pagar
+        String nocoincidence = "El valor de la factura no coincide con el valor total de los pagos: " + total + " != "
+                + tributo;
+        if (tributo < total) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, nocoincidence);
+        }
 
         // Crear compra
         Compra compra = new Compra();
@@ -80,50 +147,42 @@ public class FacturaController {
         compra.setTienda(tienda);
         compra.setVendedor(vendedor);
         compra.setCajero(cajero);
-        compra.setImpuestos(factura.impuesto);
+        compra.setImpuestos(impuesto);
         compra.setFecha(LocalDate.now());
         compra.setObservaciones("");
-        compra.setTotal(0.0); // Se calcula abajo
+        compra.setTotal(total);
+
+        // *** CAMBIO IMPORTANTE: Guardar la compra PRIMERO ***
         compra = compraServ.save(compra);
 
-        double total = 0.0;
-        // Procesar productos
-        for (ProductoRequest prodReq : factura.productos) {
-            Producto producto = productoServ.findAll().stream()
-                    .filter(p -> p.getReferencia().equals(prodReq.referencia))
-                    .findFirst()
-                    .orElse(null);
-            if (producto == null) return "Producto no encontrado: " + prodReq.referencia;
-
-            double precio = producto.getPrecio() * prodReq.cantidad;
-            double descuento = precio * (prodReq.descuento / 100.0);
-            double precioFinal = precio - descuento;
-            total += precioFinal;
-
-            DetallesCompra detalle = new DetallesCompra(null, compra, producto, prodReq.cantidad, producto.getPrecio(), descuento);
-            detallesCompraServ.save(detalle);
-        }
-        compra.setTotal(total + factura.impuesto);
-        compraServ.save(compra);
-
-        // Procesar pagos
-        for (PagoRequest pagoReq : factura.medios_pago) {
-            TipoPago tipoPago = tipoPagoServ.findAll().stream()
-                    .filter(tp -> tp.getNombre().equalsIgnoreCase(pagoReq.tipo_pago))
-                    .findFirst()
-                    .orElse(null);
-            if (tipoPago == null) return "Tipo de pago no encontrado: " + pagoReq.tipo_pago;
-
-            Pago pago = new Pago(null, compra, tipoPago, pagoReq.tipo_tarjeta, pagoReq.cuotas, pagoReq.valor);
+        // Ahora asignar la compra guardada a los pagos y guardarlos
+        for (Pago pago : pagos) {
+            pago.setCompra(compra);
             pagoServ.save(pago);
         }
 
-        return "Factura registrada correctamente";
+        // Asignar la compra guardada a los detalles y guardarlos
+        for (DetallesCompra detalle : detalles) {
+            detalle.setCompra(compra);
+            detallesCompraServ.save(detalle);
+        }
+
+		return """
+			{
+				"status": "success",
+				"message": "La factura se ha creado correctamente con el número: %s",
+				"data": {
+				"numero": "%s",
+				"total": "%.0f",
+				"fecha": "%s"
+				}
+			}
+			""".formatted(compra.getId(), compra.getId(), total, compra.getFecha());
     }
 
     // DTOs internos para mapear el JSON de entrada
     public static class FacturaRequest {
-        public double impuesto;
+        public Double impuesto;
         public ClienteRequest cliente;
         public List<ProductoRequest> productos;
         public List<PagoRequest> medios_pago;

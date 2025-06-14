@@ -28,4 +28,8 @@ public class CompraServ {
     public void deleteById(Integer id) {
         repository.deleteById(id);
     }
+    
+    public int getLastCompraId() {
+		return (int) repository.count();
+	}
 }

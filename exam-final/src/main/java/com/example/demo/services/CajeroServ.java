@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import com.example.demo.entities.Cajero;
+import com.example.demo.entities.Cliente;
 import com.example.demo.repositories.CajeroRep;
 
 @Service
@@ -20,6 +21,13 @@ public class CajeroServ {
     public Cajero findById(Integer id) {
         return repository.findById(id).orElse(null);
     }
+    
+    public Cajero findByToken(String token) {
+		return repository.findAll().stream()
+                .filter(t -> token.equals(t.getToken()))
+                .findFirst()
+                .orElse(null);
+	}
 
     public List<Cajero> findAll() {
         return repository.findAll();

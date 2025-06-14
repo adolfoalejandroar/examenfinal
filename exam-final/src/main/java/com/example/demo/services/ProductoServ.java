@@ -20,6 +20,13 @@ public class ProductoServ {
     public Producto findById(Integer id) {
         return repository.findById(id).orElse(null);
     }
+    
+    public Producto findByReference(String reference) {
+    	return repository.findAll().stream()
+                .filter(t -> reference.equals(t.getReferencia()))
+                .findFirst()
+                .orElse(null);
+    }
 
     public List<Producto> findAll() {
         return repository.findAll();

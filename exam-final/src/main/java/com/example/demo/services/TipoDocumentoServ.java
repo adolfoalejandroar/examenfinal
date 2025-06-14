@@ -10,22 +10,29 @@ import com.example.demo.repositories.TipoDocumentoRep;
 @Service
 public class TipoDocumentoServ {
 
-    @Autowired
-    private TipoDocumentoRep repository;
+	@Autowired
+	private TipoDocumentoRep repository;
 
-    public TipoDocumento save(TipoDocumento tipoDocumento) {
-        return repository.save(tipoDocumento);
-    }
+	public TipoDocumento save(TipoDocumento tipoDocumento) {
+		return repository.save(tipoDocumento);
+	}
 
-    public TipoDocumento findById(Integer id) {
-        return repository.findById(id).orElse(null);
-    }
+	public TipoDocumento findById(Integer id) {
+		return repository.findById(id).orElse(null);
+	}
 
-    public List<TipoDocumento> findAll() {
-        return repository.findAll();
-    }
+	public TipoDocumento findByType(String type) {
+		return repository.findAll().stream()
+                .filter(t -> type.equals(t.getNombre()))
+                .findFirst()
+                .orElse(null);
+	}
 
-    public void deleteById(Integer id) {
-        repository.deleteById(id);
-    }
+	public List<TipoDocumento> findAll() {
+		return repository.findAll();
+	}
+
+	public void deleteById(Integer id) {
+		repository.deleteById(id);
+	}
 }

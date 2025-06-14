@@ -20,6 +20,13 @@ public class TipoPagoServ {
     public TipoPago findById(Integer id) {
         return repository.findById(id).orElse(null);
     }
+    
+    public TipoPago findByType(String type) {
+    	return repository.findAll().stream()
+                .filter(t -> type.equalsIgnoreCase(t.getNombre()))
+                .findFirst()
+                .orElse(null);
+    }
 
     public List<TipoPago> findAll() {
         return repository.findAll();

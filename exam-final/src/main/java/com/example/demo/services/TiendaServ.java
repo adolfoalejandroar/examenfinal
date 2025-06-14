@@ -20,12 +20,19 @@ public class TiendaServ {
     public Tienda findById(Integer id) {
         return repository.findById(id).orElse(null);
     }
+    
+    public Tienda findByUUID(String uuid) {
+    	return repository.findAll().stream()
+                .filter(t -> uuid.equals(t.getUuid()))
+                .findFirst()
+                .orElse(null);
+    }
 
     public List<Tienda> findAll() {
         return repository.findAll();
     }
 
     public void deleteById(Integer id) {
-        repository.deleteById(id);
-    }
+		repository.deleteById(id);
+	}
 }

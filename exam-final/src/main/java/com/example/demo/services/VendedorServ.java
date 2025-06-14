@@ -20,6 +20,13 @@ public class VendedorServ {
     public Vendedor findById(Integer id) {
         return repository.findById(id).orElse(null);
     }
+    
+    public Vendedor findByDocument(String documento) {
+    	return repository.findAll().stream()
+                .filter(t -> documento.equals(t.getDocumento()))
+                .findFirst()
+                .orElse(null);
+    }
 
     public List<Vendedor> findAll() {
         return repository.findAll();
