@@ -72,8 +72,8 @@ public class FacturaController {
 		}
 
 		// El cajero debe estar asignado a la tienda
-		if (cajero.getTienda().getUuid() != uuid) {
-			String message = "El cajero no está asignado a esta tienda";
+		if (!cajero.getTienda().getUuid().equals(uuid)) {
+			String message = "El cajero no está asignado a esta tienda ";
 			throw new ResponseStatusException(HttpStatus.FORBIDDEN, message);
 		}
 
@@ -165,13 +165,14 @@ public class FacturaController {
 			pago.setValor(pagoReq.valor);
 			// NO asignar compra aún
 			pagos.add(pago);
-
+			
 			tributo += pago.getValor();
 		}
 
 		// Si la cantidad de dinero pagado es inferior a la cantidad que se debe pagar
 		String nocoincidence = "El valor de la factura no coincide con el valor total de los pagos";
-		if (tributo != total) {
+		nocoincidence += ". Total factura: %.0f, Total pagos: %.0f".formatted(total, tributo);
+		if (tributo < total) {
 			throw new ResponseStatusException(HttpStatus.FORBIDDEN, nocoincidence);
 		}
 
@@ -180,6 +181,7 @@ public class FacturaController {
 		compra.setCliente(cliente);
 		compra.setTienda(tienda);
 		compra.setVendedor(vendedor);
+		
 		compra.setCajero(cajero);
 		compra.setImpuestos(impuesto);
 		compra.setFecha(LocalDate.now());
